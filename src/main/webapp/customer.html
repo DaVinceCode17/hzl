@@ -1,0 +1,167 @@
+<script>
+    // ===== CHECK IF LOGGED IN =====
+    const customerId = localStorage.getItem('current_customer_id');
+    if (!customerId) {
+        window.location.href = 'login.html';
+    }
+
+    // ===== LOAD USER NAME =====
+    async function loadUser() {
+        try {
+            const response = await fetch('/api/laundry/customer/' + customerId);
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('userNameDisplay').textContent = data.customer.firstName + ' ' + data.customer.lastName;
+            }
+        } catch (error) {
+            console.error('Error loading user:', error);
+        }
+    }
+    loadUser();
+
+    // ===== LOGOUT =====
+    document.getElementById('logoutBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (confirm('Are you sure you want to logout?')) {
+            localStorage.removeItem('current_customer_id');
+            window.location.href = 'index.html';
+        }
+    });
+
+    // ===== MINI CART =====
+    document.getElementById('miniCartIcon').addEventListener('click', function() {
+        renderCartOrders();
+        document.getElementById('cartModal').classList.add('show');
+    });
+
+    // ===== SUBMIT ORDER =====
+    document.getElementById('submitOrderBtn').addEventListener('click', async function() {
+        const notif = document.getElementById('customerNotification');
+        const customerId = localStorage.getItem('current_customer_id');
+
+        if (!customerId) {
+            notif.className = 'notification show error';
+            notif.innerHTML = '<i class="fas fa-exclamation-circle"></i> Please log in first.';
+            return;
+        }
+
+        const serviceType = document.querySelector('input[name="serviceType"]:checked').value;
+        const services = [];
+        document.querySelectorAll('#servicesGroup input[type="checkbox"]:checked').forEach(cb => services.push(cb.value));
+
+        if (services.length === 0) {
+            notif.className = 'notification show error';
+            notif.innerHTML = '<i class="fas fa-exclamation-circle"></i> Select at least one service.';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/orders/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    customerId: parseInt(customerId),
+                    services: services.join(', '),
+                    serviceType: serviceType
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const order = data.order;
+                const summaryBox = document.getElementById('orderSummaryBox');
+                const summaryContent = document.getElementById('orderSummaryContent');
+                summaryContent.innerHTML = `
+                    <div class="detail-row"><span class="label">Queue #</span><span class="value">${order.queueNumber}</span></div>
+                    <div class="detail-row"><span class="label">Services</span><span class="value">${services.join(' + ')}</span></div>
+                    <div class="detail-row"><span class="label">Status</span><span class="value" style="color:#b8860b;">Pending</span></div>
+                `;
+                summaryBox.classList.add('show');
+
+                document.getElementById('popupMessage').textContent = 'Order #' + order.queueNumber + ' submitted successfully!';
+                document.getElementById('successPopup').classList.add('show');
+
+                updateCartBadge();
+                document.querySelectorAll('#servicesGroup input[type="checkbox"]').forEach(cb => cb.checked = false);
+                document.querySelector('#servicesGroup input[value="Wash"]').checked = true;
+            } else {
+                notif.className = 'notification show error';
+                notif.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + data.message;
+            }
+        } catch (error) {
+            notif.className = 'notification show error';
+            notif.innerHTML = '<i class="fas fa-exclamation-circle"></i> Network error. Please try again.';
+        }
+    });
+
+    // ===== POPUP OK BUTTON =====
+    document.getElementById('popupOkBtn').addEventListener('click', function() {
+        document.getElementById('successPopup').classList.remove('show');
+    });
+
+    // ===== CART =====
+    async function updateCartBadge() {
+        try {
+            const customerId = localStorage.getItem('current_customer_id');
+            if (!customerId) {
+                document.getElementById('miniCartBadge').textContent = '0';
+                return;
+            }
+            const response = await fetch('/api/orders/customer/' + customerId);
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('miniCartBadge').textContent = data.orders.length;
+            }
+        } catch (error) {
+            console.error('Error updating cart:', error);
+        }
+    }
+
+    async function renderCartOrders() {
+        const customerId = localStorage.getItem('current_customer_id');
+        const list = document.getElementById('cartOrdersList');
+
+        if (!customerId) {
+            list.innerHTML = '<div class="empty-cart">Please log in to view your orders.</div>';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/orders/customer/' + customerId);
+            const data = await response.json();
+            if (data.success && data.orders.length > 0) {
+                let html = '';
+                data.orders.forEach(o => {
+                    const statusClass = o.status === 'pending' ? 'pending' : o.status === 'ongoing' ? 'ongoing' : 'completed';
+                    html += `
+                        <div class="cart-item">
+                            <div>
+                                <strong>#${o.queueNumber}</strong> — ${o.services}
+                                <br /><small style="color:#4f6f82;">${o.serviceType === 'dropoff' ? 'Drop-off' : 'Pick-up'} · ${o.createdAt}</small>
+                            </div>
+                            <span class="status-badge ${statusClass}">${o.status.charAt(0).toUpperCase() + o.status.slice(1)}</span>
+                        </div>
+                    `;
+                });
+                list.innerHTML = html;
+            } else {
+                list.innerHTML = '<div class="empty-cart">No orders yet. Schedule your first laundry service!</div>';
+            }
+        } catch (error) {
+            list.innerHTML = '<div class="empty-cart">Error loading orders.</div>';
+        }
+    }
+
+    document.getElementById('closeCartBtn').addEventListener('click', function() {
+        document.getElementById('cartModal').classList.remove('show');
+    });
+
+    document.getElementById('cartModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.remove('show');
+        }
+    });
+
+    updateCartBadge();
+</script>
