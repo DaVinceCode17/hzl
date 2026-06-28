@@ -228,6 +228,7 @@
                     notif.className = 'notification show success';
                     notif.innerHTML = '<i class="fas fa-check-circle"></i> Login successful! Redirecting...';
                     localStorage.setItem('current_customer_id', data.user.id);
+                    localStorage.setItem('current_user_role', data.user.role);
                     setTimeout(() => {
                         if (data.user.role === 'admin') {
                             window.location.href = 'admin.html';
